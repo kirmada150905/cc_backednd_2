@@ -157,6 +157,13 @@ func (path *FilePath) handler(w http.ResponseWriter, r *http.Request) {
 }
 
 func (path *FilePath) id_Handler(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Path[1:]
+	_, err := strconv.Atoi(id)
+	if err != nil {
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorStruct{Error: "did you forget ? before query?"})
+		return
+	}
 	file, err := os.Open(path.Path)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
@@ -201,14 +208,31 @@ func (path *FilePath) id_Handler(w http.ResponseWriter, r *http.Request) {
 
 func main() {
 	var filePath string
-	fmt.Print("Enter the file path: ")
-	fmt.Scanln(&filePath)
+	// fmt.Print("Enter the file path: ")
+	// fmt.Scanln(&filePath)
+	for {
+		fmt.Print("Enter the file path: ")
+		fmt.Scanln(&filePath)
 
+		// Check if the file exists
+		_, err := os.Stat(filePath)
+		if err != nil {
+			if os.IsNotExist(err) {
+				fmt.Println("File not found! Please try again.")
+			} else {
+				fmt.Println("Error accessing the file:", err)
+			}
+		} else {
+			// If file exists, break out of the loop
+			break
+		}
+	}
 	// path := FilePath{Path: "./data.txt"}
 	path := FilePath{Path: filePath}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", path.handler)
 	mux.HandleFunc("/{id}", path.id_Handler)
+	fmt.Println("Server up and running at http://localhost:8080")
 	http.ListenAndServe(":8080", mux)
 }
