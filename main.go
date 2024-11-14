@@ -210,7 +210,7 @@ func main() {
 	var filePath string
 	// fmt.Print("Enter the file path: ")
 	// fmt.Scanln(&filePath)
-	for {
+	for{
 		fmt.Print("Enter the file path: ")
 		fmt.Scanln(&filePath)
 
