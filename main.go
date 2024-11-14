@@ -1,11 +1,16 @@
+// //todo: handle slash at the end of url
+
+// ● {{base_url}}
+// ● {{base_url}}?format=text
+// ● {{base_url}}?branch=X
+// ● {{base_url}}?year=X
+// ● {{base_url}}/:id
+
 package main
 
 import (
 	"bufio"
 	"encoding/json"
-	"fmt"
-
-	// "log"
 	"net/http"
 	"os"
 	"strconv"
@@ -21,7 +26,7 @@ type details struct {
 	Campus string `json:"campus"`
 	Email  string `json:"email"`
 	Id     string `json:"id"`
-	Uid    string `json:uid`
+	Uid    string `json:"uid"`
 }
 
 func get_brach(id string) string {
@@ -60,17 +65,15 @@ func get_brach(id string) string {
 
 	return dict[id[4:6]]
 }
+
 func get_campus(id string) string {
 	if id[12] == 'P' {
 		return "pilani"
 	}
 	if id[12] == 'G' {
 		return "goa"
-	} else {
-		return "hyderabad"
-
 	}
-
+	return "hyderabad"
 }
 
 type FilePath struct {
@@ -79,101 +82,74 @@ type FilePath struct {
 
 func (path *FilePath) handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	file, err := os.Open(path.Path) // For read access.
+	file, err := os.Open(path.Path)
 	if err != nil {
-		w.Write([]byte(err.Error()))
+		http.Error(w, `{"error": "File not found", "status": 404}`, http.StatusNotFound)
+		return
 	}
+	defer file.Close()
+
 	fileInfo, err := file.Stat()
 	if err != nil {
-		w.Write([]byte("Unable to get file info"))
-		// w.Write({"Unable to get file info": http.StatusInternalServerError})
+		http.Error(w, `{"error": "File was found but unable to get file info", "status": 500}`, http.StatusInternalServerError)
 		return
 	}
 	fileSize := fileInfo.Size()
 
 	scanner := bufio.NewScanner(file)
 	queries := r.URL.Query()
-	var ids []string //array for storing id's
+	var ids []string
 
-	//{{base_url}}
 	if len(queries) == 0 {
 		for scanner.Scan() {
 			line := scanner.Text()
 			ids = append(ids, line)
 		}
-
-		dataStruct := Data{Ids: ids} //struct for storing id's
-		//encoding dataStruct into JSON
-		jsonStr, err := json.Marshal(dataStruct)
+		json.NewEncoder(w).Encode(Data{Ids: ids})
+	} else if queries.Get("format") == "text" {
+		fileData := make([]byte, fileSize)
+		_, err = file.Read(fileData)
 		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
+			http.Error(w, `{"error": "Error reading file", "status": 500}`, http.StatusInternalServerError)
 			return
 		}
-		w.Write(jsonStr)
-	} else if queries.Get("format") == "text" { //{{base_url}}?format=text
-
-		//getting file size
-
-		file_data := make([]byte, fileSize)
-		_, err = file.Read(file_data)
-		if err != nil {
-			http.Error(w, "Error reading file", http.StatusInternalServerError)
-			return
-		}
-
 		w.Header().Set("Content-Type", "text/plain")
-		w.Write(file_data)
-
-	} else if queries.Get("branch") != "" { //{{base_url}}?branch=X
+		w.Write(fileData)
+	} else if queries.Get("branch") != "" {
 		for scanner.Scan() {
 			line := scanner.Text()
 			if get_brach(line) == queries.Get("branch") {
 				ids = append(ids, line)
 			}
 		}
-
-		dataStruct := Data{Ids: ids} //struct for storing id's
-
-		//encoding dataStruct into JSON
-		jsonStr, err := json.Marshal(dataStruct)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Write(jsonStr)
-	} else if queries.Get("year") != "" { //{{base_url}}?year=X
+		json.NewEncoder(w).Encode(Data{Ids: ids})
+	} else if queries.Get("year") != "" {
 		X, _ := strconv.Atoi(queries.Get("year"))
 		for scanner.Scan() {
 			line := scanner.Text()
-			year, _ := strconv.Atoi(line[0:4]) //slicing oart of the line(id) that represents year
+			year, _ := strconv.Atoi(line[0:4])
 			if year == 2024+1-X {
 				ids = append(ids, line)
-				fmt.Println(line)
 			}
 		}
-
-		dataStruct := Data{Ids: ids} //struct for storing id's
-
-		//encoding dataStruct into JSON
-		jsonStr, err := json.Marshal(dataStruct)
-		if err != nil {
-			http.Error(w, err.Error(), http.StatusInternalServerError)
-			return
-		}
-		w.Write(jsonStr)
+		json.NewEncoder(w).Encode(Data{Ids: ids})
 	} else {
-		w.Write([]byte("error"))
+		http.Error(w, `{"error": "Invalid request", "status": 400}`, http.StatusBadRequest)
 	}
-
 }
 
 func (path *FilePath) id_Handler(w http.ResponseWriter, r *http.Request) {
-	file, _ := os.Open(path.Path) // For read access.
+	file, err := os.Open(path.Path)
+	if err != nil {
+		http.Error(w, `{"error": "File not found", "status": 404}`, http.StatusNotFound)
+		return
+	}
+	defer file.Close()
 
 	scanner := bufio.NewScanner(file)
 	w.Header().Set("Content-Type", "application/json")
 
-	response_sent := false
+	responseSent := false
 	for scanner.Scan() {
 		line := scanner.Text()
 		if line[8:12] == r.URL.Path[1:] {
@@ -182,47 +158,32 @@ func (path *FilePath) id_Handler(w http.ResponseWriter, r *http.Request) {
 			}
 			year, _ := strconv.Atoi(line[0:4])
 			year = 2025 - year
-			brach := get_brach(line)
+			branch := get_brach(line)
 			campus := get_campus(line)
 			email := "f" + line[0:4] + line[8:12] + "@" + campus + ".bits-pilani.ac.in"
-			id := line
-			uid := line[8:12]
-			id_deail := details{Year: year, Branch: brach, Campus: campus, Email: email, Id: id, Uid: uid}
-			response := data{Id: id_deail}
-			jsonStr, err := json.Marshal(response)
-			if err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
-				return
+			idDetail := details{
+				Year:   year,
+				Branch: branch,
+				Campus: campus,
+				Email:  email,
+				Id:     line,
+				Uid:    line[8:12],
 			}
-			w.Write(jsonStr)
-			response_sent = true
+			json.NewEncoder(w).Encode(data{Id: idDetail})
+			responseSent = true
 			break
 		}
 	}
-	if !response_sent {
-		w.Write([]byte("id not found"))
+	if !responseSent {
+		http.Error(w, `{"error": "ID not found", "status": 404}`, http.StatusNotFound)
 	}
 }
 
 func main() {
-
-	type Person struct {
-		Name string `json:"name"`
-		Age  int    `json:"age"`
-	}
 	path := FilePath{Path: "./data.txt"}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", path.handler)
 	mux.HandleFunc("/{id}", path.id_Handler)
 	http.ListenAndServe(":8080", mux)
-
 }
-
-//todo: handle slash at the end of url
-
-// ● {{base_url}}
-// ● {{base_url}}?format=text
-// ● {{base_url}}?branch=X
-// ● {{base_url}}?year=X
-// ● {{base_url}}/:id
