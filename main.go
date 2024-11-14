@@ -9,6 +9,7 @@ package main
 import (
 	"bufio"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"os"
 	"strconv"
@@ -88,7 +89,7 @@ func (path *FilePath) handler(w http.ResponseWriter, r *http.Request) {
 	file, err := os.Open(path.Path)
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(ErrorStruct{Error: "File was not found"})
+		json.NewEncoder(w).Encode(ErrorStruct{Error: "Data not not found"})
 		return
 	}
 	defer file.Close()
@@ -194,12 +195,17 @@ func (path *FilePath) id_Handler(w http.ResponseWriter, r *http.Request) {
 	}
 	if !responseSent {
 		w.WriteHeader(http.StatusNotFound)
-		json.NewEncoder(w).Encode(ErrorStruct{Error: "Id not found"})
+		json.NewEncoder(w).Encode(ErrorStruct{Error: "id not found"})
 	}
 }
 
 func main() {
-	path := FilePath{Path: "./data.txt"}
+	var filePath string
+	fmt.Print("Enter the file path: ")
+	fmt.Scanln(&filePath)
+
+	// path := FilePath{Path: "./data.txt"}
+	path := FilePath{Path: filePath}
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/", path.handler)
