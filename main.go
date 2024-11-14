@@ -1,5 +1,3 @@
-// //todo: handle slash at the end of url
-
 // ● {{base_url}}
 // ● {{base_url}}?format=text
 // ● {{base_url}}?branch=X
@@ -18,6 +16,11 @@ import (
 
 type Data struct {
 	Ids []string `json:"ids"`
+}
+
+type ErrorStruct struct {
+	// E []byte `json:error`
+	Error string `json:"error"`
 }
 
 type details struct {
@@ -84,14 +87,16 @@ func (path *FilePath) handler(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
 	file, err := os.Open(path.Path)
 	if err != nil {
-		http.Error(w, `{"error": "File not found", "status": 404}`, http.StatusNotFound)
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorStruct{Error: "File was not found"})
 		return
 	}
 	defer file.Close()
 
 	fileInfo, err := file.Stat()
 	if err != nil {
-		http.Error(w, `{"error": "File was found but unable to get file info", "status": 500}`, http.StatusInternalServerError)
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(ErrorStruct{Error: "File was found but unable to get file info"})
 		return
 	}
 	fileSize := fileInfo.Size()
@@ -110,7 +115,8 @@ func (path *FilePath) handler(w http.ResponseWriter, r *http.Request) {
 		fileData := make([]byte, fileSize)
 		_, err = file.Read(fileData)
 		if err != nil {
-			http.Error(w, `{"error": "Error reading file", "status": 500}`, http.StatusInternalServerError)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(ErrorStruct{Error: "Error reading file"})
 			return
 		}
 		w.Header().Set("Content-Type", "text/plain")
@@ -122,7 +128,12 @@ func (path *FilePath) handler(w http.ResponseWriter, r *http.Request) {
 				ids = append(ids, line)
 			}
 		}
-		json.NewEncoder(w).Encode(Data{Ids: ids})
+		if len(ids) != 0 {
+			json.NewEncoder(w).Encode(Data{Ids: ids})
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(ErrorStruct{Error: "No data with requested branch"})
+		}
 	} else if queries.Get("year") != "" {
 		X, _ := strconv.Atoi(queries.Get("year"))
 		for scanner.Scan() {
@@ -132,16 +143,23 @@ func (path *FilePath) handler(w http.ResponseWriter, r *http.Request) {
 				ids = append(ids, line)
 			}
 		}
-		json.NewEncoder(w).Encode(Data{Ids: ids})
+		if len(ids) != 0 {
+			json.NewEncoder(w).Encode(Data{Ids: ids})
+		} else {
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(ErrorStruct{Error: "No data with requested year"})
+		}
 	} else {
-		http.Error(w, `{"error": "Invalid request", "status": 400}`, http.StatusBadRequest)
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(ErrorStruct{Error: "Invalid Request"})
 	}
 }
 
 func (path *FilePath) id_Handler(w http.ResponseWriter, r *http.Request) {
 	file, err := os.Open(path.Path)
 	if err != nil {
-		http.Error(w, `{"error": "File not found", "status": 404}`, http.StatusNotFound)
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorStruct{Error: "File was not found"})
 		return
 	}
 	defer file.Close()
@@ -175,7 +193,8 @@ func (path *FilePath) id_Handler(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if !responseSent {
-		http.Error(w, `{"error": "ID not found", "status": 404}`, http.StatusNotFound)
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(ErrorStruct{Error: "Id not found"})
 	}
 }
 
